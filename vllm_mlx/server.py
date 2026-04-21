@@ -539,7 +539,7 @@ async def verify_api_key(credentials: HTTPAuthorizationCredentials = Depends(sec
                 "Anyone can access the API. Use --api-key to enable authentication."
             )
             _auth_warning_logged = True
-        return True  # No auth required
+        return None  # No auth configured — access granted without credentials
 
     if credentials is None:
         raise HTTPException(status_code=401, detail="API key required")
