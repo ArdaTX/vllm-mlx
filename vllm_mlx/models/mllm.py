@@ -24,7 +24,6 @@ import tempfile
 import threading
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from ipaddress import ip_address, ip_network
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
@@ -149,34 +148,6 @@ def is_base64_image(s: str) -> bool:
     return s.startswith("data:image/") or (
         len(s) > 100 and not s.startswith(("http://", "https://", "/"))
     )
-
-
-_SSRF_BLOCKED_RANGES = [
-    ip_network("127.0.0.0/8"),
-    ip_network("10.0.0.0/8"),
-    ip_network("172.16.0.0/12"),
-    ip_network("192.168.0.0/16"),
-    ip_network("169.254.0.0/16"),  # AWS IMDS / link-local
-    ip_network("100.64.0.0/10"),   # Shared address space
-    ip_network("::1/128"),
-    ip_network("fc00::/7"),
-]
-
-
-def _assert_safe_url(url: str) -> None:
-    """Reject URLs that resolve to private/internal IP ranges (SSRF prevention)."""
-    parsed = urlparse(url)
-    if parsed.scheme not in ("http", "https"):
-        raise ValueError(f"Unsupported URL scheme: {parsed.scheme!r}")
-    hostname = parsed.hostname
-    if not hostname:
-        raise ValueError("URL has no hostname")
-    try:
-        resolved = ip_address(socket.gethostbyname(hostname))
-    except socket.gaierror as exc:
-        raise ValueError(f"Cannot resolve hostname {hostname!r}: {exc}") from exc
-    if any(resolved in net for net in _SSRF_BLOCKED_RANGES):
-        raise ValueError(f"URL resolves to a blocked IP range: {resolved}")
 
 
 def is_url(s: str) -> bool:
@@ -316,8 +287,6 @@ def download_image(url: str, timeout: int = 30, max_size: int = MAX_IMAGE_SIZE) 
     }
 
     # First, make a HEAD request to check Content-Length
-    _assert_safe_url(url)
-
     try:
         head_response = _request_with_safe_redirects(
             "HEAD", url, timeout=timeout, headers=headers
@@ -408,8 +377,6 @@ def download_video(url: str, timeout: int = 120, max_size: int = MAX_VIDEO_SIZE)
     logger.info(f"Downloading video from: {url}")
 
     # First, make a HEAD request to check Content-Length
-    _assert_safe_url(url)
-
     try:
         head_response = _request_with_safe_redirects(
             "HEAD", url, timeout=timeout, headers=headers
